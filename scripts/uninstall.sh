@@ -21,4 +21,4 @@ pmset disablesleep 0
 
 rm -f "/Library/PrivilegedHelperTools/$LABEL" "/Library/LaunchDaemons/$LABEL.plist"
 rm -rf "/Library/Application Support/MagGlow" /Library/Logs/MagGlow /Applications/MagGlow.app
-echo "MagGlow desinstalado."
+echo "MagGlow uninstalled."

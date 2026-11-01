@@ -21,6 +21,8 @@ app: build build/AppIcon.icns
 	mkdir -p $(APP)/Contents/MacOS $(RES)
 	cp packaging/Info.plist $(APP)/Contents/Info.plist
 	cp build/AppIcon.icns $(RES)/AppIcon.icns
+	cp -R packaging/es.lproj $(RES)/
+	mkdir -p $(RES)/en.lproj
 	cp $(BUILD)/MagGlow $(APP)/Contents/MacOS/MagGlow
 	cp $(BUILD)/MagGlowHelper $(RES)/MagGlowHelper
 	cp packaging/com.magglow.helper.plist scripts/install-helper.sh scripts/uninstall.sh $(RES)/

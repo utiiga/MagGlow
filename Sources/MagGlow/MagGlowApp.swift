@@ -100,7 +100,7 @@ final class Model: ObservableObject {
         do {
             try data.write(to: MagGlowPaths.request, options: .atomic)
         } catch {
-            NSLog("MagGlow: no se pudo escribir la petición: \(error)")
+            NSLog("MagGlow: couldn't write request: \(error)")
         }
     }
 }

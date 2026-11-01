@@ -14,22 +14,22 @@ DEST="/Applications/MagGlow.app"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-echo "Descargando MagGlow…"
+echo "Downloading MagGlow…"
 curl -fsSL "$ZIP_URL" -o "$TMP/MagGlow.zip"
 ditto -xk "$TMP/MagGlow.zip" "$TMP/unpacked"
 APP="$TMP/unpacked/MagGlow.app"
 if [ ! -d "$APP" ]; then
-    echo "error: MagGlow.app no está en el archivo descargado" >&2
+    echo "error: MagGlow.app not found in the downloaded archive" >&2
     exit 1
 fi
 
 osascript -e 'tell application "MagGlow" to quit' >/dev/null 2>&1 || true
 pkill -x MagGlow 2>/dev/null || true
 
-echo "Instalando en /Applications (te pedirá tu contraseña de administrador)…"
+echo "Installing to /Applications (you will be asked for your admin password)…"
 sudo rm -rf "$DEST"
 sudo ditto "$APP" "$DEST"
 sudo "$DEST/Contents/Resources/install-helper.sh" "$(id -un)"
 
 open "$DEST"
-echo "Listo: busca el icono del conector MagSafe en la barra de menús."
+echo "Done: look for the MagSafe connector icon in the menu bar."

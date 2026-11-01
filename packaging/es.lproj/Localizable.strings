@@ -1,0 +1,16 @@
+/* Spanish translation of the menu bar popover. */
+
+"Inactive" = "Inactivo";
+"Plugged in" = "Enchufado";
+"Battery" = "Batería";
+"Helper missing.\nReinstall MagGlow" = "Falta el ayudante.\nVuelve a instalar MagGlow";
+"Won't sleep,\neven with the lid closed" = "No se suspende,\nni con la tapa cerrada";
+"Awake with\nthe lid closed" = "Despierto con\nla tapa cerrada";
+"Sleeps when\nthe lid closes" = "Se suspende al\ncerrar la tapa";
+"Stay awake with the lid closed" = "No suspender con la tapa cerrada";
+"Cancel" = "Cancelar";
+"MagSafe LED" = "LED de MagSafe";
+"Blinking" = "Parpadeando";
+"Normal" = "Normal";
+"Open at login" = "Abrir al iniciar sesión";
+"Quit MagGlow" = "Salir de MagGlow";

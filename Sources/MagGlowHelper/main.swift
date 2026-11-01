@@ -33,7 +33,7 @@ final class Helper {
 
     func start() {
         if smc_open() != 0 {
-            log("no se pudo abrir AppleSMC; el LED no parpadeará")
+            log("couldn't open AppleSMC; the LED won't blink")
         }
         try? FileManager.default.createDirectory(at: MagGlowPaths.dir, withIntermediateDirectories: true)
         watchSystemSleep()
@@ -101,7 +101,7 @@ final class Helper {
         if rc == 0 {
             lastLED = led
         } else if lastLED != nil || force {
-            log("fallo al escribir ACLC=\(led.rawValue) (\(rc))")
+            log("failed to write ACLC=\(led.rawValue) (\(rc))")
             lastLED = nil
         }
     }
@@ -124,10 +124,10 @@ final class Helper {
             p.waitUntilExit()
             if p.terminationStatus != 0 {
                 let message = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                log("pmset \(args.joined(separator: " ")) salió con \(p.terminationStatus): \(message)")
+                log("pmset \(args.joined(separator: " ")) exited with \(p.terminationStatus): \(message)")
             }
         } catch {
-            log("pmset \(args.joined(separator: " ")) falló: \(error)")
+            log("pmset \(args.joined(separator: " ")) failed: \(error)")
         }
     }
 
@@ -194,7 +194,7 @@ final class Helper {
             try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: MagGlowPaths.status.path)
             lastStatus = status
         } catch {
-            log("no se pudo escribir status.json: \(error)")
+            log("couldn't write status.json: \(error)")
         }
     }
 

@@ -29,4 +29,4 @@ install -m 644 -o root -g wheel "$HERE/$LABEL.plist" "/Library/LaunchDaemons/$LA
 install -d -m 755 -o "$OWNER" -g staff "/Library/Application Support/MagGlow"
 
 launchctl bootstrap system "/Library/LaunchDaemons/$LABEL.plist"
-echo "Ayudante de MagGlow instalado y en marcha."
+echo "MagGlow helper installed and running."

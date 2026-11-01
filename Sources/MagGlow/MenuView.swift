@@ -24,18 +24,18 @@ struct MenuView: View {
             if model.helperRunning {
                 SectionDivider()
                 InfoRow(symbol: "light.beacon.max",
-                        title: "LED de MagSafe",
-                        value: model.status?.blinking == true ? "Parpadeando" : "Normal")
+                        title: "MagSafe LED",
+                        value: model.status?.blinking == true ? "Blinking" : "Normal")
                     .padding(.horizontal, 6)
                     .padding(.vertical, 5)
             }
 
             SectionDivider()
             VStack(spacing: 0) {
-                MenuRow(title: "Abrir al iniciar sesión", checked: model.launchAtLogin) {
+                MenuRow(title: "Open at login", checked: model.launchAtLogin) {
                     model.setLaunchAtLogin(!model.launchAtLogin)
                 }
-                MenuRow(title: "Salir de MagGlow") { NSApp.terminate(nil) }
+                MenuRow(title: "Quit MagGlow") { NSApp.terminate(nil) }
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 5)
@@ -71,16 +71,16 @@ struct MenuView: View {
     }
 
     private var headline: String {
-        if !model.helperRunning { return "Inactivo" }
+        if !model.helperRunning { return String(localized: "Inactive") }
         if let remaining = model.remaining { return format(remaining) }
-        return model.onPower ? "Enchufado" : "Batería"
+        return model.onPower ? String(localized: "Plugged in") : String(localized: "Battery")
     }
 
     private var detail: String {
-        if !model.helperRunning { return "Falta el ayudante.\nVuelve a instalar MagGlow" }
-        if model.onPower { return "No se suspende,\nni con la tapa cerrada" }
-        if model.remaining != nil { return "Despierto con\nla tapa cerrada" }
-        return "Se suspende al\ncerrar la tapa"
+        if !model.helperRunning { return String(localized: "Helper missing.\nReinstall MagGlow") }
+        if model.onPower { return String(localized: "Won't sleep,\neven with the lid closed") }
+        if model.remaining != nil { return String(localized: "Awake with\nthe lid closed") }
+        return String(localized: "Sleeps when\nthe lid closes")
     }
 
     private var symbol: String {
@@ -94,12 +94,12 @@ struct MenuView: View {
     private var timerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("No suspender con la tapa cerrada")
+                Text("Stay awake with the lid closed")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
                 if model.remaining != nil {
-                    Button("Cancelar") { model.cancel() }
+                    Button("Cancel") { model.cancel() }
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundStyle(Color.accentColor)
@@ -131,7 +131,7 @@ private struct SectionDivider: View {
 
 /// A full-width row that highlights on hover, like a menu item.
 private struct MenuRow: View {
-    let title: String
+    let title: LocalizedStringKey
     var checked: Bool? = nil
     let action: () -> Void
     @State private var hovering = false
@@ -162,8 +162,8 @@ private struct MenuRow: View {
 
 private struct InfoRow: View {
     let symbol: String
-    let title: String
-    let value: String
+    let title: LocalizedStringKey
+    let value: LocalizedStringKey
 
     var body: some View {
         HStack(spacing: 8) {

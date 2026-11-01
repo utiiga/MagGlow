@@ -1,52 +1,50 @@
 <p align="center">
-  <img src="docs/icon.png" alt="Icono de MagGlow" width="128">
+  <img src="docs/icon.png" alt="MagGlow icon" width="128">
 </p>
 
 # MagGlow
 
-Mantén tu Mac despierto con la tapa cerrada y sabe de un vistazo que sigue
-trabajando: **el LED del cargador MagSafe parpadea mientras el Mac está activo
-con la pantalla apagada.**
+Keep your Mac awake with the lid closed, and know at a glance that it's still
+working: **the MagSafe charger LED blinks while the Mac is awake with its
+display off.**
 
-Pensado para dejar el portátil cerrado mientras un agente (Claude Code, un
-build largo, una descarga…) sigue trabajando, sin dudar de si se ha dormido.
+Made for leaving a laptop closed while an agent (Claude Code, a long build, a
+download…) keeps working, without wondering whether it fell asleep.
 
-## Qué hace
+## What it does
 
-- **Enchufado a la corriente:** el Mac no se suspende nunca, ni con la tapa
-  cerrada.
-- **Con batería:** se suspende como siempre, pero desde la barra de menús
-  puedes pedirle que aguante con la tapa cerrada **15 min, 30 min o 1 h**.
-  Al acabar el tiempo (o si cancelas) y con la tapa cerrada, se duerme en el
-  momento.
-- **El LED de MagSafe parpadea en verde** mientras el Mac está despierto con
-  la tapa cerrada o la pantalla apagada. El resto del tiempo el LED funciona
-  como siempre.
-- Icono en la barra de menús: conector con el LED encendido (enchufado),
-  apagado (batería) o con los minutos que quedan si hay temporizador.
+- **On power:** the Mac never sleeps, not even with the lid closed.
+- **On battery:** it sleeps as usual, but from the menu bar you can keep it
+  awake with the lid closed for **15 min, 30 min or 1 h**. When the time is up
+  (or you cancel) and the lid is closed, it goes to sleep right away.
+- **The MagSafe LED blinks green** while the Mac is awake with the lid closed
+  or the display off. The rest of the time the LED behaves as usual.
+- Menu bar icon: a connector with its LED lit (on power), hollow (on battery),
+  or with the minutes left while a timer is running.
 
-## Requisitos
+The interface is in English and Spanish, following your macOS language.
 
-- MacBook con Apple Silicon y puerto MagSafe 3 (MacBook Pro / Air de 2021 en
-  adelante).
-- macOS 14 Sonoma o posterior.
-- Un cable MagSafe con LED (los de Apple).
+## Requirements
 
-## Instalación
+- Apple Silicon MacBook with a MagSafe 3 port (2021 or later MacBook Pro / Air).
+- macOS 14 Sonoma or later.
+- A MagSafe cable with an LED (Apple's own).
 
-Abre Terminal (⌘-Espacio, escribe «Terminal»), pega esto y pulsa Intro:
+## Install
+
+Open Terminal (⌘-Space, type "Terminal"), paste this and press Return:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/utiiga/MagGlow/main/scripts/install.sh | bash
 ```
 
-Descarga la última versión, la copia en Aplicaciones, instala el ayudante en
-segundo plano (te pedirá tu contraseña de administrador una vez) y abre la
-app. Busca el icono del conector en la barra de menús.
+It downloads the latest release into Applications, installs the background
+helper (asks for your admin password once) and opens the app. Look for the
+connector icon in the menu bar.
 
-### Compilar desde el código
+### Build from source
 
-Necesitas las Command Line Tools de Xcode (`xcode-select --install`).
+You need the Xcode Command Line Tools (`xcode-select --install`).
 
 ```sh
 git clone https://github.com/utiiga/MagGlow.git
@@ -54,49 +52,48 @@ cd MagGlow
 make install
 ```
 
-## Desinstalar
+## Uninstall
 
 ```sh
 sudo /Applications/MagGlow.app/Contents/Resources/uninstall.sh
 ```
 
-Detiene el ayudante, devuelve el LED a macOS, vuelve a permitir la
-suspensión y borra la app y sus archivos.
+It stops the helper, hands the LED back to macOS, re-enables sleep and removes
+the app and its files.
 
-## Cómo funciona
+## How it works
 
-MagGlow tiene dos piezas:
+MagGlow has two parts:
 
-- **La app de la barra de menús** (se ejecuta como tu usuario): muestra el
-  estado, gestiona el temporizador y avisa cuando la pantalla se apaga. Escribe
-  lo que quiere en `/Library/Application Support/MagGlow/request.json`.
-- **El ayudante** (`com.magglow.helper`, un daemon de launchd que se ejecuta
-  como root): lee esa petición cada medio segundo y
-  - bloquea o permite la suspensión con `pmset disablesleep`;
-  - hace parpadear el LED escribiendo la clave del SMC `ACLC`
-    (`3` verde, `1` apagado, `0` control de macOS).
+- **The menu bar app** (runs as you): shows the state, runs the timer and
+  reports when the display goes to sleep. It writes what it wants to
+  `/Library/Application Support/MagGlow/request.json`.
+- **The helper** (`com.magglow.helper`, a launchd daemon running as root):
+  reads that request every half second and
+  - blocks or allows sleep with `pmset disablesleep`;
+  - blinks the LED by writing the SMC key `ACLC`
+    (`3` green, `1` off, `0` macOS control).
 
-  Publica su estado en `status.json` para que la app lo muestre.
+  It publishes its state in `status.json` for the app to display.
 
-### ¿Es seguro?
+### Is it safe?
 
-- `ACLC` solo cambia lo que *indica* el LED; no afecta a la carga, al voltaje
-  ni a la gestión de la batería.
-- Cuando el ayudante se detiene (al desinstalar, al apagar o si falla),
-  devuelve el LED a macOS y vuelve a permitir la suspensión, así que el Mac
-  nunca se queda sin poder dormirse.
-- Antes de que el Mac entre en reposo, el LED vuelve al control de macOS.
+- `ACLC` only changes what the LED *shows*; it doesn't touch charging,
+  voltage or battery management.
+- Whenever the helper stops (uninstall, shutdown or a crash) it hands the LED
+  back to macOS and re-enables sleep, so the Mac is never left unable to sleep.
+- Right before the Mac goes to sleep, the LED returns to macOS control.
 
-**Ojo:** enchufado y con la tapa cerrada, el Mac no se suspende. No lo metas
-en una funda o mochila en ese estado: puede calentarse.
+**Heads-up:** on power with the lid closed, the Mac won't sleep. Don't put it
+in a sleeve or backpack like that: it can get hot.
 
-## Agradecimientos
+## Credits
 
-La idea de controlar el LED con `ACLC` viene de proyectos como
+The idea of driving the LED through `ACLC` comes from projects like
 [MagHue](https://github.com/kamenlevi/MagHue),
-[batt](https://github.com/charlie0129/batt) y
+[batt](https://github.com/charlie0129/batt) and
 [BatFi](https://github.com/rurza/BatFi).
 
-## Licencia
+## License
 
 [MIT](LICENSE)
