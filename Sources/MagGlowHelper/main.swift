@@ -3,7 +3,11 @@
 // - On power, or while the app's battery timer is running, it blocks system
 //   sleep (lid closed included) with `pmset disablesleep 1`.
 // - While the Mac is awake with the lid closed or the displays asleep, it
-//   blinks the MagSafe LED by toggling the SMC key ACLC (3 green, 1 off).
+//   blinks the MagSafe LED slowly by toggling the SMC key ACLC, in the colour
+//   macOS would show (amber while charging, green when charged; 1 is off).
+// - When the lid closes while it keeps the Mac awake, it turns the displays
+//   off (unless an external display is in use), since with sleep disabled
+//   macOS leaves the built-in one lit behind the closed lid.
 // - Whenever it stops, it hands the LED back to macOS (ACLC 0) and lets the
 //   Mac sleep again, so a crash or uninstall never leaves sleep disabled.
 
@@ -19,13 +23,20 @@ let kIOMessageCanSystemSleep: UInt32 = 0xE000_0270
 let kIOMessageSystemWillSleep: UInt32 = 0xE000_0280
 
 enum LED: UInt8 {
-    case system = 0, off = 1, green = 3
+    case system = 0, off = 1, green = 3, amber = 4
 }
+
+/// Seconds the LED stays lit, then dark, while blinking.
+let blinkHalfPeriod: TimeInterval = 1.5
+/// While the lid is closed and the displays haven't reported going to sleep,
+/// ask again this often.
+let displaySleepRetry: TimeInterval = 10
 
 final class Helper {
     private var lastLED: LED?
     private var sleepBlocked: Bool?
-    private var blinkOn = false
+    private var wasLidClosed = false
+    private var lastDisplaySleep = Date.distantPast
     private var lastStatus: MagGlowStatus?
     private var rootPort: io_connect_t = 0
     private var notifier: io_object_t = 0
@@ -73,12 +84,23 @@ final class Helper {
             sleepBlocked = wantBlock
         }
 
+        // With sleep disabled, closing the lid doesn't turn the built-in
+        // display off by itself. In clamshell mode (external display) the
+        // displays are in use, so leave them alone.
+        if lidClosed && wantBlock && !request.externalDisplay {
+            let now = Date()
+            if !wasLidClosed || (!request.displayAsleep && now.timeIntervalSince(lastDisplaySleep) >= displaySleepRetry) {
+                pmset(["displaysleepnow"])
+                lastDisplaySleep = now
+            }
+        }
+        wasLidClosed = lidClosed
+
         let blink = lidClosed || request.displayAsleep
         if blink {
-            blinkOn.toggle()
-            setLED(blinkOn ? .green : .off)
+            let lit = Int(Date().timeIntervalSince1970 / blinkHalfPeriod) % 2 == 0
+            setLED(lit ? chargeColor() : .off)
         } else {
-            blinkOn = false
             setLED(.system)
         }
 
@@ -162,6 +184,23 @@ final class Helper {
               let type = IOPSGetProvidingPowerSourceType(info)?.takeUnretainedValue() as String?
         else { return false }
         return type == kIOPMACPowerKey
+    }
+
+    /// The colour macOS gives the MagSafe LED: amber while the battery is
+    /// charging, green once it's charged or charging is on hold.
+    private func chargeColor() -> LED {
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef]
+        else { return .green }
+        for source in sources {
+            guard let desc = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any],
+                  desc[kIOPSTypeKey] as? String == kIOPSInternalBatteryType
+            else { continue }
+            let charging = desc[kIOPSIsChargingKey] as? Bool ?? false
+            let charged = desc[kIOPSIsChargedKey] as? Bool ?? false
+            return charging && !charged ? .amber : .green
+        }
+        return .green
     }
 
     private func isLidClosed() -> Bool {

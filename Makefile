@@ -2,6 +2,10 @@ BUILD := .build/release
 APP := build/MagGlow.app
 RES := $(APP)/Contents/Resources
 DEST := /Applications/MagGlow.app
+# Sign with your Apple Development certificate when there is one: macOS then
+# recognises each new build as the same app and keeps its permissions
+# (Calendar, Accessibility). Without one, fall back to ad-hoc signing.
+SIGN ?= $(or $(shell security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development/ { print $$2; exit }'),-)
 
 .PHONY: build app zip install uninstall clean
 
@@ -26,8 +30,8 @@ app: build build/AppIcon.icns
 	cp $(BUILD)/MagGlow $(APP)/Contents/MacOS/MagGlow
 	cp $(BUILD)/MagGlowHelper $(RES)/MagGlowHelper
 	cp packaging/com.magglow.helper.plist scripts/install-helper.sh scripts/uninstall.sh $(RES)/
-	codesign --force --sign - $(RES)/MagGlowHelper
-	codesign --force --sign - $(APP)
+	codesign --force --sign "$(SIGN)" $(RES)/MagGlowHelper
+	codesign --force --sign "$(SIGN)" $(APP)
 
 zip: app
 	cd build && rm -f MagGlow.zip && ditto -c -k --keepParent MagGlow.app MagGlow.zip

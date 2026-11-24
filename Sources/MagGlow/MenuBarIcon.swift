@@ -1,17 +1,25 @@
 import AppKit
 
 /// The menu bar glyph: a MagSafe connector whose LED is a dot. Drawn on a
-/// 24-unit grid and scaled to 18 pt, as a template image so macOS tints it
-/// like the system's own icons.
+/// 24-unit grid at 1 pt per unit, cropped to the glyph (22 × 14 pt) so it
+/// fills the menu bar like the system's icons. A template image, so macOS
+/// tints it like them.
 enum MenuBarIcon {
     enum LED { case on, off }
 
+    /// Time left for the menu bar: "42 min", or "7 h 42 min" from an hour up.
+    static func shortTime(_ interval: TimeInterval) -> String {
+        let minutes = Int((interval / 60).rounded(.up))
+        if minutes < 60 { return "\(minutes) min" }
+        let rest = minutes % 60
+        return rest == 0 ? "\(minutes / 60) h" : "\(minutes / 60) h \(rest) min"
+    }
+
     static func image(led: LED) -> NSImage {
-        let size: CGFloat = 18
-        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
-            let scale = size / 24
+        let image = NSImage(size: NSSize(width: 22, height: 14), flipped: false) { _ in
+            // The glyph spans x 1.5–23 and y 6.5–17.5 on the grid; centre it.
             let transform = NSAffineTransform()
-            transform.scale(by: scale)
+            transform.translateX(by: -1.25, yBy: -5)
             transform.concat()
 
             NSColor.black.set()

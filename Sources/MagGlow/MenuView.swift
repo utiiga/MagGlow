@@ -1,86 +1,73 @@
 import AppKit
 import SwiftUI
 
-/// The popover, laid out like the system's own menu bar extras (Weather,
-/// Battery): a large state headline, hairline-separated sections and
-/// full-width rows that highlight on hover.
+/// The menu bar menu. It uses the system's own menu (MenuBarExtra's `.menu`
+/// style), so it looks like every other menu bar extra; this view only
+/// supplies its items.
 struct MenuView: View {
     @ObservedObject var model: Model
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 12)
-
-            if model.helperRunning && (!model.onPower || model.remaining != nil) {
-                SectionDivider()
-                timerSection
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-            }
-
+        // Status rows are buttons, not Text: the menu greys out plain text
+        // as if it were a disabled item. They open Battery settings, like
+        // the system's battery menu does.
+        Section("MagGlow") {
+            Button(action: openBatterySettings) { Label(headline, systemImage: symbol) }
+            Button(action: openBatterySettings) { Label(detail, systemImage: "laptopcomputer") }
             if model.helperRunning {
-                SectionDivider()
-                InfoRow(symbol: "light.beacon.max",
-                        title: "MagSafe LED",
-                        value: model.status?.blinking == true ? "Blinking" : "Normal")
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 5)
-            }
-
-            SectionDivider()
-            VStack(spacing: 0) {
-                MenuRow(title: "Open at login", checked: model.launchAtLogin) {
-                    model.setLaunchAtLogin(!model.launchAtLogin)
+                Button(action: openBatterySettings) {
+                    Label(model.status?.blinking == true ? "MagSafe LED: blinking" : "MagSafe LED: normal",
+                          systemImage: "light.beacon.max")
                 }
-                MenuRow(title: "Quit MagGlow") { NSApp.terminate(nil) }
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 5)
-        }
-        .frame(width: 290)
-    }
-
-    // MARK: Header
-
-    private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("MagGlow")
-                    .font(.system(size: 13, weight: .semibold))
-                Text(headline)
-                    .font(.system(size: 30, weight: .regular))
-                    .monospacedDigit()
-                    .padding(.top, 2)
-            }
-            Spacer(minLength: 12)
-            VStack(alignment: .trailing, spacing: 2) {
-                Image(systemName: symbol)
-                    .font(.system(size: 18))
-                    .symbolRenderingMode(.hierarchical)
-                    .frame(height: 20)
-                Text(detail)
-                    .font(.system(size: 12, weight: .medium))
-                    .multilineTextAlignment(.trailing)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 6)
             }
         }
+
+        if model.helperRunning && (!model.onPower || model.remaining != nil) {
+            Divider()
+            Section("Stay awake with the lid closed") {
+                ForEach([15, 30, 60, 240, 480], id: \.self) { minutes in
+                    Toggle(minutes >= 60 ? "\(minutes / 60) h" : "\(minutes) min", isOn: Binding(
+                        get: { model.remaining != nil && model.chosenMinutes == minutes },
+                        set: { on in on ? model.keepAwake(minutes: minutes) : model.cancel() }
+                    ))
+                }
+                if let remaining = model.remaining {
+                    Button("Cancel (\(format(remaining)) left)") { model.cancel() }
+                }
+            }
+        }
+
+        Divider()
+        Toggle("Simulate activity", isOn: $model.simulateActivity)
+        if (model.simulateActivity || (model.islandEnabled && model.replaceSystemHUD)) && !model.accessibilityGranted {
+            Button("Allow in Accessibility settings…") { model.requestAccessibility() }
+        }
+        FichajeMenu(fichaje: model.island.fichaje)
+
+        Divider()
+        Toggle("Island over the notch", isOn: $model.islandEnabled)
+        if model.islandEnabled {
+            Toggle("Volume and brightness in the island", isOn: $model.replaceSystemHUD)
+        }
+        Toggle("Open at login", isOn: Binding(
+            get: { model.launchAtLogin },
+            set: { model.setLaunchAtLogin($0) }
+        ))
+        Button("Quit MagGlow") { NSApp.terminate(nil) }
+            .keyboardShortcut("q")
     }
 
     private var headline: String {
         if !model.helperRunning { return String(localized: "Inactive") }
-        if let remaining = model.remaining { return format(remaining) }
+        if model.remaining != nil { return String(localized: "Awake with the lid closed") }
         return model.onPower ? String(localized: "Plugged in") : String(localized: "Battery")
     }
 
     private var detail: String {
-        if !model.helperRunning { return String(localized: "Helper missing.\nReinstall MagGlow") }
-        if model.onPower { return String(localized: "Won't sleep,\neven with the lid closed") }
-        if model.remaining != nil { return String(localized: "Awake with\nthe lid closed") }
-        return String(localized: "Sleeps when\nthe lid closes")
+        if !model.helperRunning { return String(localized: "Helper missing. Reinstall MagGlow") }
+        if model.onPower { return String(localized: "Won't sleep, even with the lid closed") }
+        if model.remaining != nil { return String(localized: "Won't sleep until the time is up") }
+        return String(localized: "Sleeps when the lid closes")
     }
 
     private var symbol: String {
@@ -89,117 +76,18 @@ struct MenuView: View {
         return model.onPower ? "bolt.fill" : "battery.75percent"
     }
 
-    // MARK: Timer
-
-    private var timerSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Stay awake with the lid closed")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if model.remaining != nil {
-                    Button("Cancel") { model.cancel() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.accentColor)
-                }
-            }
-            HStack(spacing: 8) {
-                ForEach([15, 30, 60], id: \.self) { minutes in
-                    DurationButton(title: minutes == 60 ? "1 h" : "\(minutes) min") {
-                        model.keepAwake(minutes: minutes)
-                    }
-                }
-            }
+    private func openBatterySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension") {
+            NSWorkspace.shared.open(url)
         }
     }
 
     private func format(_ interval: TimeInterval) -> String {
         let total = Int(interval.rounded(.up))
+        if total >= 3600 {
+            return String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
+        }
         return String(format: "%d:%02d", total / 60, total % 60)
-    }
-}
-
-// MARK: - Building blocks
-
-private struct SectionDivider: View {
-    var body: some View {
-        Divider().padding(.horizontal, 16)
-    }
-}
-
-/// A full-width row that highlights on hover, like a menu item.
-private struct MenuRow: View {
-    let title: LocalizedStringKey
-    var checked: Bool? = nil
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack {
-                Text(title)
-                Spacer()
-                if checked == true {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .semibold))
-                }
-            }
-            .font(.system(size: 13))
-            .padding(.horizontal, 10)
-            .frame(height: 24)
-            .contentShape(Rectangle())
-            .background(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(hovering ? Color.primary.opacity(0.1) : .clear)
-            )
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-    }
-}
-
-private struct InfoRow: View {
-    let symbol: String
-    let title: LocalizedStringKey
-    let value: LocalizedStringKey
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol)
-                .font(.system(size: 12))
-                .frame(width: 16)
-                .foregroundStyle(.secondary)
-            Text(title)
-            Spacer()
-            Text(value).foregroundStyle(.secondary)
-        }
-        .font(.system(size: 13))
-        .padding(.horizontal, 10)
-        .frame(height: 24)
-    }
-}
-
-/// Capsule button in the style of Control Center's option chips.
-private struct DurationButton: View {
-    let title: String
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .frame(maxWidth: .infinity)
-                .frame(height: 28)
-                .background(
-                    Capsule().fill(Color.primary.opacity(hovering ? 0.16 : 0.08))
-                )
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
     }
 }
 
@@ -218,12 +106,69 @@ struct MagGlowApp: App {
             } else if let remaining = model.remaining {
                 HStack(spacing: 3) {
                     Image(nsImage: MenuBarIcon.image(led: .on))
-                    Text("\(Int((remaining / 60).rounded(.up))) min")
+                    Text(MenuBarIcon.shortTime(remaining))
                 }
             } else {
                 Image(nsImage: MenuBarIcon.image(led: model.onPower ? .on : .off))
             }
         }
-        .menuBarExtraStyle(.window)
+        .menuBarExtraStyle(.menu)
+    }
+}
+
+/// The workday in the menu: connect with a token, see the day, clock in
+/// or out, disconnect.
+private struct FichajeMenu: View {
+    @ObservedObject var fichaje: Fichaje
+
+    var body: some View {
+        Section("Workday") {
+            if fichaje.connected {
+                if let estado = fichaje.estado {
+                    Button(action: fichaje.marcar) {
+                        Label("\(estado.titulo) · \(Fichaje.hm(fichaje.minutesWorked(at: Date())))",
+                              systemImage: estado.dentro ? "record.circle" : "pause.circle")
+                    }
+                    Button(estado.boton, action: fichaje.marcar)
+                        .disabled(fichaje.busy)
+                } else if let error = fichaje.error {
+                    Button(action: fichaje.refresh) { Label(error, systemImage: "exclamationmark.triangle") }
+                }
+                Button("Disconnect workday") { fichaje.disconnect() }
+            } else {
+                Button("Connect workday…") { connect() }
+            }
+        }
+    }
+
+    /// Asks for the server address and the personal clock-in token.
+    private func connect() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = String(localized: "Connect your workday")
+        alert.informativeText = String(localized: "Enter your clock-in server's address and your personal clock-in token. The token is kept in your Keychain.")
+        let address = NSTextField(frame: NSRect(x: 0, y: 30, width: 300, height: 24))
+        address.placeholderString = String(localized: "Server address")
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        field.placeholderString = String(localized: "Token")
+        let stack = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 54))
+        stack.addSubview(address)
+        stack.addSubview(field)
+        alert.accessoryView = stack
+        alert.addButton(withTitle: String(localized: "Connect"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        alert.window.initialFirstResponder = address
+        address.nextKeyView = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let host = address.stringValue, token = field.stringValue
+        Task { @MainActor in
+            if await !fichaje.connect(host: host, token: token) {
+                let failed = NSAlert()
+                failed.messageText = String(localized: "Couldn't connect")
+                failed.informativeText = fichaje.error ?? String(localized: "Check the address and the token and try again.")
+                NSApp.activate(ignoringOtherApps: true)
+                failed.runModal()
+            }
+        }
     }
 }

@@ -29,5 +29,13 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>MagGlow shows and controls what Music or Spotify is playing in the island over the notch.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>MagGlow shows Bluetooth devices and their battery in the island when they connect.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>MagGlow shows your upcoming events in the island over the notch.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>MagGlow shows your upcoming events in the island over the notch.</string>
 </dict>
 </plist>

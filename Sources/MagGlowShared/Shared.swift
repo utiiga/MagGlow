@@ -14,10 +14,21 @@ public struct MagGlowRequest: Codable, Equatable {
     public var awakeUntil: Date?
     /// The app saw the displays go to sleep.
     public var displayAsleep: Bool
+    /// An external display is connected. With the lid closed the Mac is then
+    /// in clamshell mode and the helper must not put the displays to sleep.
+    public var externalDisplay: Bool
 
-    public init(awakeUntil: Date? = nil, displayAsleep: Bool = false) {
+    public init(awakeUntil: Date? = nil, displayAsleep: Bool = false, externalDisplay: Bool = false) {
         self.awakeUntil = awakeUntil
         self.displayAsleep = displayAsleep
+        self.externalDisplay = externalDisplay
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        awakeUntil = try c.decodeIfPresent(Date.self, forKey: .awakeUntil)
+        displayAsleep = try c.decodeIfPresent(Bool.self, forKey: .displayAsleep) ?? false
+        externalDisplay = try c.decodeIfPresent(Bool.self, forKey: .externalDisplay) ?? false
     }
 }
 
