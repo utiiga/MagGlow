@@ -37,12 +37,11 @@ final class IslandModel: ObservableObject {
     /// The concave flare where the island's sides meet the top of the screen.
     static let maxFlare: CGFloat = 18
 
+    /// The bare notch keeps the physical one's small flare; with wings, or
+    /// open, the island flares like it does open.
     var flare: CGFloat {
-        switch state {
-        case .closed: return 6
-        case .hover: return 7
-        case .open: return Self.maxFlare
-        }
+        if state == .open || compact != .none { return Self.maxFlare }
+        return state == .hover ? 7 : 6
     }
 
     func size(for state: State) -> CGSize {
@@ -71,8 +70,8 @@ final class IslandModel: ObservableObject {
 
     var bottomRadius: CGFloat {
         switch state {
-        case .closed: return 10
-        case .hover: return 13
+        case .closed: return compact == .none ? 10 : 14
+        case .hover: return compact == .none ? 13 : 16
         case .open: return 32
         }
     }

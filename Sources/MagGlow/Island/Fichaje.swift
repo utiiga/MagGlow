@@ -20,6 +20,9 @@ final class Fichaje: ObservableObject {
         var titulo: String
         var subtitulo: String?
         var boton: String
+        /// Whether today is a workday by the work calendar; nil when the
+        /// server doesn't know (or is older and doesn't say).
+        var toca_fichar: Bool?
     }
 
     @Published private(set) var connected = false
@@ -27,8 +30,22 @@ final class Fichaje: ObservableObject {
     @Published private(set) var busy = false
     /// The last problem talking to the server, in words to show.
     @Published private(set) var error: String?
-    /// Clocked in right now: worth a live activity on the island.
+    /// A workday to keep in view: clocked in, paused before the day's hours
+    /// are done, or not started yet on a day you are due to work. Worth a
+    /// live activity on the island, to start or resume it from there.
     @Published private(set) var live = false
+
+    /// A workday today, not started yet.
+    var notStarted: Bool {
+        guard let estado else { return false }
+        return estado.primera_entrada == nil && estado.toca_fichar == true
+    }
+
+    /// Started today but clocked out before finishing the day's hours.
+    var paused: Bool {
+        guard let estado else { return false }
+        return !estado.dentro && estado.primera_entrada != nil
+    }
 
     /// When `estado` arrived, to keep the clock running between refreshes.
     private var fetchedAt = Date()
@@ -39,7 +56,18 @@ final class Fichaje: ObservableObject {
         UserDefaults.standard.string(forKey: "fichajeHost")
     }
 
+    /// `-FichajePreview pendiente` shows a sample day you are due to work
+    /// and haven't started, without talking to the server: to check the look.
+    private let preview = UserDefaults.standard.string(forKey: "FichajePreview") == "pendiente"
+
     init() {
+        if preview {
+            connected = true
+            apply(Estado(dentro: false, siguiente_sentido: "entrada", primera_entrada: nil, minutos_trabajados: 0,
+                         horas_requeridas: 8, salida_prevista: nil, titulo: "Iniciar jornada",
+                         subtitulo: "Haz click para empezar", boton: "Fichar entrada", toca_fichar: true))
+            return
+        }
         connected = Keychain.token != nil
         poll = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
@@ -104,7 +132,7 @@ final class Fichaje: ObservableObject {
     // MARK: API
 
     func refresh() {
-        guard connected, let token = Keychain.token else { return }
+        guard connected, !preview, let token = Keychain.token else { return }
         Task {
             if let estado: Estado = await request("GET", "estado", token: token) { apply(estado) }
         }
@@ -112,7 +140,7 @@ final class Fichaje: ObservableObject {
 
     /// Clocks in or out, whichever is next; the server stamps the time.
     func marcar() {
-        guard connected, !busy, let token = Keychain.token else { return }
+        guard connected, !busy, !preview, let token = Keychain.token else { return }
         busy = true
         Task {
             struct Respuesta: Decodable { var estado: Estado }
@@ -128,7 +156,11 @@ final class Fichaje: ObservableObject {
         self.estado = estado
         fetchedAt = Date()
         error = nil
-        if live != estado.dentro { live = estado.dentro }
+        let pending = estado.primera_entrada != nil
+            && estado.minutos_trabajados < Int((estado.horas_requeridas * 60).rounded())
+        let due = estado.primera_entrada == nil && estado.toca_fichar == true
+        let underWay = estado.dentro || pending || due
+        if live != underWay { live = underWay }
     }
 
     private func request<T: Decodable>(_ method: String, _ path: String, token: String,
@@ -209,32 +241,44 @@ struct CompactFichaje: View {
     let wings: IslandModel.Wings
     let notch: CGFloat
 
-    static let wings = IslandModel.Wings(left: 56, right: 56)
+    static let wings = IslandModel.Wings(left: 46, right: 46)
 
     var body: some View {
         WingsLayout(wings: wings, notch: notch) {
-            LiveDot()
+            if fichaje.notStarted {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(HubColor.orange)
+                    .transition(.blurFade)
+            } else if fichaje.paused {
+                Image(systemName: "pause.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(HubColor.orange)
+                    .transition(.blurFade)
+            } else {
+                LiveDot().transition(.blurFade)
+            }
         } right: {
             TimelineView(.periodic(from: .now, by: 15)) { context in
                 Text(Fichaje.hm(fichaje.minutesWorked(at: context.date)))
                     .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.white.opacity(fichaje.paused || fichaje.notStarted ? 0.5 : 1))
                     .contentTransition(.numericText())
             }
         }
     }
 }
 
-/// A green dot breathing, like a recording light: the workday is running.
+/// An orange dot breathing, like a recording light: the workday is running.
 private struct LiveDot: View {
     @State private var on = false
 
     var body: some View {
         ZStack {
-            Circle().fill(Self.green.opacity(0.35)).frame(width: 14, height: 14)
+            Circle().fill(HubColor.orange.opacity(0.4)).frame(width: 15, height: 15)
                 .scaleEffect(on ? 1 : 0.5).opacity(on ? 0 : 1)
-            Circle().fill(Self.green).frame(width: 7, height: 7)
-                .shadow(color: Self.green.opacity(0.7), radius: 3)
+            Circle().fill(HubColor.orange).frame(width: 8, height: 8)
+                .shadow(color: HubColor.orange.opacity(0.7), radius: 3)
         }
         .frame(width: 16, height: 16)
         .onAppear {
@@ -242,12 +286,12 @@ private struct LiveDot: View {
         }
     }
 
-    static let green = Color(red: 0.35, green: 0.85, blue: 0.45)
 }
 
-/// The open island's workday page: state, time worked against the day's
-/// hours, and the button to clock in or out. Everything starts below the
-/// notch, which hides the top band in the middle.
+/// The open island's workday page, laid out like the hub's own dashboard
+/// card: the state with its dot, the last clock-in and the button on the
+/// left; an arc from the first clock-in to the expected end on the right,
+/// with the time worked inside. Everything starts below the notch.
 struct FichajeView: View {
     @ObservedObject var fichaje: Fichaje
     @ObservedObject var island: IslandModel
@@ -256,86 +300,132 @@ struct FichajeView: View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
             let estado = fichaje.estado
             let dentro = estado?.dentro ?? false
-            let tint: Color = dentro ? Color(red: 0.35, green: 0.85, blue: 0.45) : .white.opacity(0.55)
-            VStack(spacing: 0) {
-                HStack(alignment: .center) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text((estado?.titulo ?? String(localized: "Workday")).uppercased())
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(tint)
-                        Text(Fichaje.hm(fichaje.minutesWorked(at: context.date)))
-                            .font(.system(size: 34, weight: .regular).monospacedDigit())
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 9) {
+                        Text(estado?.titulo ?? String(localized: "Workday"))
+                            .font(.system(size: 21, weight: .bold))
                             .foregroundStyle(.white)
-                            .contentTransition(.numericText())
-                        Text(detail)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.4))
                             .lineLimit(1)
+                        Circle()
+                            .fill(dentro ? HubColor.orange : .white.opacity(0.3))
+                            .frame(width: 10, height: 10)
+                            .shadow(color: dentro ? HubColor.orange.opacity(0.6) : .clear, radius: 4)
                     }
-                    Spacer(minLength: 8)
-                    ProgressRing(value: fichaje.progress(at: context.date), tint: tint)
-                }
-                Spacer(minLength: 10)
-                HStack {
-                    if let error = fichaje.error {
-                        Text(error)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color(red: 1, green: 0.45, blue: 0.4))
-                            .lineLimit(2)
-                    } else if let salida = estado?.salida_prevista {
-                        Text(String(localized: "Expected out \(salida)"))
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.4))
-                    }
-                    Spacer(minLength: 8)
+                    Text(detail)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(fichaje.error == nil ? .white.opacity(0.45) : Color(red: 1, green: 0.45, blue: 0.4))
+                        .lineLimit(2)
+                        .padding(.top, 4)
+                    Spacer(minLength: 10)
                     Button(action: fichaje.marcar) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             if fichaje.busy {
-                                ProgressView().controlSize(.mini).tint(.black)
+                                ProgressView().controlSize(.small).tint(HubColor.light)
+                                    .frame(width: 16, height: 16)
+                            } else {
+                                Image(systemName: dentro ? "stop.circle" : "play.circle")
+                                    .font(.system(size: 15, weight: .semibold))
                             }
                             Text(estado?.boton ?? String(localized: "Clock in"))
+                                .font(.system(size: 13, weight: .bold))
                         }
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.black)
-                        .padding(.horizontal, 14)
-                        .frame(height: 28)
-                        .background(Capsule().fill(dentro ? Color(red: 1, green: 0.42, blue: 0.4) : Color(red: 0.35, green: 0.85, blue: 0.45)))
+                        .foregroundStyle(HubColor.light)
+                        .padding(.horizontal, 15)
+                        .frame(height: 34)
+                        .background(Capsule().fill(HubColor.orange.opacity(0.2)))
+                        .overlay(Capsule().strokeBorder(HubColor.orange.opacity(0.4)))
+                        .contentShape(Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressButton())
                     .disabled(fichaje.busy || estado == nil)
                 }
+                .frame(maxHeight: .infinity, alignment: .top)
+
+                Spacer(minLength: 0)
+
+                WorkdayArc(progress: fichaje.progress(at: context.date),
+                           worked: fichaje.minutesWorked(at: context.date),
+                           start: estado?.primera_entrada,
+                           end: estado?.salida_prevista,
+                           active: dentro)
             }
-            .padding(.top, island.notch.height + 6)
-            .padding(.horizontal, 18)
-            .padding(.bottom, 16)
+            .padding(.top, island.notch.height + 8)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 18)
         }
     }
 
     private var detail: String {
-        guard let estado = fichaje.estado else { return fichaje.error ?? "" }
+        if let error = fichaje.error { return error }
+        guard let estado = fichaje.estado else { return "" }
         if let subtitulo = estado.subtitulo, !subtitulo.isEmpty { return subtitulo }
-        return String(localized: "Today's hours: \(Fichaje.hm(Int(estado.horas_requeridas * 60)))")
+        if let salida = estado.salida_prevista { return String(localized: "Expected out \(salida)") }
+        return ""
     }
 }
 
-/// Time worked against the day's hours, as a ring with the percentage.
-private struct ProgressRing: View {
-    let value: Double
-    let tint: Color
+/// The hub's accent.
+enum HubColor {
+    static let orange = Color(red: 0.88, green: 0.56, blue: 0.19)
+    /// For text and icons on an orange tint.
+    static let light = Color(red: 0.99, green: 0.76, blue: 0.47)
+}
+
+/// Shrinks a little while pressed.
+private struct PressButton: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.65), value: configuration.isPressed)
+    }
+}
+
+/// The day as an open arc, three quarters of a circle with the gap at the
+/// bottom: it fills from the first clock-in towards the expected end, with
+/// the time worked in the middle and both times under the arc's ends.
+private struct WorkdayArc: View {
+    let progress: Double
+    let worked: Int
+    let start: String?
+    let end: String?
+    let active: Bool
+
+    private static let sweep = 0.75
+    private let size: CGFloat = 92
+    private let line: CGFloat = 8
 
     var body: some View {
-        ZStack {
-            Circle().stroke(.white.opacity(0.1), lineWidth: 5)
-            Circle()
-                .trim(from: 0, to: min(max(value, 0), 1))
-                .stroke(tint, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .shadow(color: tint.opacity(0.4), radius: 3)
-            Text("\(Int((value * 100).rounded()))%")
-                .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                .foregroundStyle(.white.opacity(0.8))
+        VStack(spacing: -6) {
+            ZStack {
+                arc(to: Self.sweep).stroke(.white.opacity(0.1), style: StrokeStyle(lineWidth: line, lineCap: .round))
+                arc(to: Self.sweep * min(max(progress, 0), 1))
+                    .stroke(active ? HubColor.orange : .white.opacity(0.45),
+                            style: StrokeStyle(lineWidth: line, lineCap: .round))
+                    .shadow(color: active ? HubColor.orange.opacity(0.35) : .clear, radius: 4)
+                Text(String(format: "%02d:%02d", max(worked, 0) / 60, max(worked, 0) % 60))
+                    .font(.system(size: 20, weight: .bold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .contentTransition(.numericText())
+            }
+            .frame(width: size, height: size)
+            .animation(.easeOut(duration: 0.6), value: progress)
+
+            HStack {
+                Text(start ?? "--:--")
+                Spacer(minLength: 0)
+                Text(end ?? "--:--")
+            }
+            .font(.system(size: 10.5, weight: .bold).monospacedDigit())
+            .foregroundStyle(.white.opacity(0.4))
+            .frame(width: size + 6)
         }
-        .frame(width: 58, height: 58)
-        .animation(.easeOut(duration: 0.6), value: value)
+    }
+
+    /// The arc from its start (bottom left) to `fraction` of a full turn.
+    private func arc(to fraction: Double) -> some Shape {
+        Circle()
+            .trim(from: 0, to: fraction)
+            .rotation(.degrees(135))
     }
 }

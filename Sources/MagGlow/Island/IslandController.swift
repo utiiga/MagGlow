@@ -24,6 +24,9 @@ final class IslandController {
     private var monitors: [Any] = []
     private var subscriptions: Set<AnyCancellable> = []
     private var retryTimer: Timer?
+    /// The latest indicator, alert, music and workday state, to pick what
+    /// the closed island shows.
+    private var wanted: (hud: SystemControls.HUD?, alert: IslandAlerts.Alert?, playing: Bool, working: Bool) = (nil, nil, false, false)
     /// Horizontal scroll gathered while open, to switch pages.
     private var scrollX: CGFloat = 0
     private var swiped = false
@@ -46,17 +49,10 @@ final class IslandController {
         // then the music, then the running workday.
         Publishers.CombineLatest4(controls.$hud, alerts.$alert, nowPlaying.$visible, fichaje.$live)
             .sink { [weak self] hud, alert, playing, working in
-                let compact: IslandModel.Compact = hud != nil ? .hud : alert != nil ? .alert
-                    : playing ? .nowPlaying : working ? .fichaje : .none
-                let wings: IslandModel.Wings
-                switch compact {
-                case .none: wings = .none
-                case .hud: wings = LevelHUD.wings
-                case .alert: wings = alert.map(AlertView.wings(for:)) ?? .none
-                case .nowPlaying: wings = IslandModel.Wings(left: 32, right: 32)
-                case .fichaje: wings = CompactFichaje.wings
+                MainActor.assumeIsolated {
+                    self?.wanted = (hud, alert, playing, working)
+                    self?.updateCompact()
                 }
-                MainActor.assumeIsolated { self?.setCompact(compact, wings: wings) }
             }
             .store(in: &subscriptions)
         nowPlaying.$visible
@@ -190,6 +186,31 @@ final class IslandController {
         if fichaje.connected { all.append(.fichaje) }
         all.append(.calendar)
         return all
+    }
+
+    /// Picks what the closed island shows. Its wings sit over the menu bar:
+    /// macOS doesn't let another app make room among the menus, only the
+    /// physical notch moves them aside.
+    private func updateCompact() {
+        let (hud, alert, playing, working) = wanted
+        var compact: IslandModel.Compact = .none
+        var wings = IslandModel.Wings.none
+        if hud != nil {
+            compact = .hud
+            wings = LevelHUD.wings
+        } else if let alert {
+            compact = .alert
+            wings = AlertView.wings(for: alert)
+        } else {
+            for (kind, kindWings) in [(IslandModel.Compact.nowPlaying, IslandModel.Wings(left: 32, right: 32)),
+                                      (.fichaje, CompactFichaje.wings)]
+            where kind == .nowPlaying ? playing : working {
+                compact = kind
+                wings = kindWings
+                break
+            }
+        }
+        setCompact(compact, wings: wings)
     }
 
     private func setCompact(_ compact: IslandModel.Compact, wings: IslandModel.Wings) {

@@ -95,7 +95,16 @@ final class IslandAlerts: NSObject, ObservableObject {
 
     // MARK: Bluetooth
 
-    @objc private func deviceConnected(_ notification: IOBluetoothUserNotification, device: IOBluetoothDevice) {
+    /// IOBluetooth calls this on its own queue, not the main thread: hop to
+    /// the main thread before touching anything (doing it here crashed).
+    @objc nonisolated private func deviceConnected(_ notification: IOBluetoothUserNotification, device: IOBluetoothDevice) {
+        nonisolated(unsafe) let device = device
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated { self?.connected(device) }
+        }
+    }
+
+    private func connected(_ device: IOBluetoothDevice) {
         let name = device.name ?? String(localized: "Device")
         let symbol = Self.symbol(for: device)
         // The battery level arrives a moment after the connection.
